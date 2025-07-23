@@ -129,21 +129,38 @@ class DecoderBlock(tf.keras.Layer):
 
 
 class OutputBlock(tf.keras.layers.Layer):
-    def __init__(self, num_classes=1, trainable=True, padding='valid', batchnorm=True, **kwargs):
+    def __init__(self, input_shape = (512,512) , num_classes=1, trainable=True, padding='valid', batchnorm=True, **kwargs):
         super(OutputBlock, self).__init__(**kwargs)
         self.conv = ConvBlock(num_classes, kernel_size=1, padding=padding, batchnorm=batchnorm, trainable=trainable)
         self.num_classes = num_classes
+        self.input_shape = input_shape  # Store the input shape for resizing
 
     def call(self, inputs):
         x = self.conv(inputs, activation=False)
         if self.num_classes > 1:
-            # (B, C, H, W)
+            # (B, H, W, C)
             x = tf.nn.softmax(x, axis=1)
         else:
             # (B, H, W, C)
             x = tf.nn.sigmoid(x)
-
+        # Resize the output to match the input shape
+        if self.input_shape is not None:
+            # x= (B, H, W, num_clases)
+            x = tf.image.resize(x, size=self.input_shape, method='bilinear')
         return x
+
+def test_resize():
+    B, C, H, W = 3, 2, 64, 64  # Example dimensions
+
+    # Generate the random tensor
+    input_tensor = tf.random.uniform(shape=(B, H, W, C), minval=0, maxval=1)
+    print("Input Tensor:")
+    print(input_tensor.shape)
+    # Resize the tensor to (B, 128, 128, C)
+    resized_tensor = tf.image.resize(input_tensor, size=(128, 128), method='bilinear')
+    print("Resized Tensor:")
+    print(resized_tensor.shape)
+
 
 def test_output_block():
     # (B, C, H, W) input shape
@@ -163,9 +180,9 @@ def test_output_block():
     print("Output shape:", output.shape)
 
 class UNET(tf.keras.Model):
-    def __init__(self, encoder_trainable=True, num_filters=None, padding='valid', batchnorm=True, classes=1, **kwargs):
+    def __init__(self, input_shape=(512, 512, 3), encoder_trainable=True, num_filters=None, padding='valid', batchnorm=True, classes=1, **kwargs):
         super(UNET, self).__init__( **kwargs)
-        self.encoder = EncoderBlock(input_shape=(512, 512, 3), num_filters=num_filters,
+        self.encoder = EncoderBlock(input_shape=input_shape, num_filters=num_filters,
                                     batchnorm=batchnorm, padding=padding, trainable=encoder_trainable)
 
         self.bottleneck = BottleneckBlock(filters=1024, kernel_size=3, padding=padding, batchnorm=batchnorm)
@@ -193,3 +210,8 @@ if __name__ == "__main__":
     model.build((None, 572, 572, 3))  # Input shape (batch_size, channels, height, width)
     tf.keras.utils.plot_model(model, "my_first_model.png")
     print(model.summary())
+    ### test resize
+    #test_resize()
+
+    ###test output block
+    #test_output_block()
