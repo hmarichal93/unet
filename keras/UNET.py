@@ -146,7 +146,15 @@ class OutputBlock(tf.keras.layers.Layer):
         # Resize the output to match the input shape
         if self.input_shape is not None:
             # x= (B, H, W, num_clases)
-            x = tf.image.resize(x, size=self.input_shape, method='bilinear')
+            #x = tf.image.resize(x, size= self.input_shape, method='bilinear')
+            #Add padding to match the input shape
+            input_height, input_width = self.input_shape
+            output_height, output_width = x.shape[1:3]
+            pad_height = input_height - output_height
+            pad_width = input_width - output_width
+            if pad_height < 0 or pad_width < 0:
+                raise ValueError("Output shape is larger than input shape, cannot pad.")
+            x = tf.pad(x, [[0, 0], [0, pad_height], [0, pad_width], [0, 0]], mode='CONSTANT')
         return x
 
 def test_resize():
@@ -180,7 +188,7 @@ def test_output_block():
     print("Output shape:", output.shape)
 
 class UNET(tf.keras.Model):
-    def __init__(self, input_shape=(512, 512, 3), encoder_trainable=True, num_filters=None, padding='valid', batchnorm=True, classes=1, **kwargs):
+    def __init__(self, input_shape=(512, 512), encoder_trainable=True, num_filters=None, padding='valid', batchnorm=True, classes=1, **kwargs):
         super(UNET, self).__init__( **kwargs)
         self.encoder = EncoderBlock(input_shape=input_shape, num_filters=num_filters,
                                     batchnorm=batchnorm, padding=padding, trainable=encoder_trainable)
@@ -189,7 +197,8 @@ class UNET(tf.keras.Model):
 
         self.decoder = DecoderBlock(num_filters=num_filters, padding=padding, batchnorm=batchnorm)
 
-        self.output_block = OutputBlock(num_classes=classes, padding=padding, batchnorm=batchnorm)
+        self.output_block = OutputBlock(num_classes=classes, padding=padding, batchnorm=batchnorm,
+                                        input_shape=input_shape)
 
     def call(self, inputs):
         x, skips = self.encoder(inputs)
@@ -206,7 +215,7 @@ class UNET(tf.keras.Model):
 
 
 if __name__ == "__main__":
-    model = UNET(encoder_trainable=True, padding='same', batchnorm=False)
+    model = UNET(encoder_trainable=True, padding='same', batchnorm=False, input_shape=(572, 572), classes=1)
     model.build((None, 572, 572, 3))  # Input shape (batch_size, channels, height, width)
     tf.keras.utils.plot_model(model, "my_first_model.png")
     print(model.summary())
